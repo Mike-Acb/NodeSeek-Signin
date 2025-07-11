@@ -22,15 +22,15 @@ def detect_environment():
     # 检测是否在青龙环境中
     ql_path_markers = ['/ql/data/', '/ql/config/', '/ql/', '/.ql/']
     in_ql_env = False
-    
+
     for path in ql_path_markers:
         if os.path.exists(path):
             in_ql_env = True
             break
-    
+
     # 检测是否在GitHub Actions环境中
     in_github_env = os.environ.get("GITHUB_ACTIONS") == "true" or (os.environ.get("GH_PAT") and os.environ.get("GITHUB_REPOSITORY"))
-    
+
     if in_ql_env:
         return "qinglong"
     elif in_github_env:
@@ -80,13 +80,13 @@ def delete_ql_env(var_name: str):
     try:
         print(f"查询要删除的环境变量: {var_name}")
         env_result = QLAPI.getEnvs({"searchValue": var_name})
-        
+
         env_ids = []
         if env_result.get("code") == 200 and env_result.get("data"):
             for env in env_result.get("data"):
                 if env.get("name") == var_name:
                     env_ids.append(env.get("id"))
-        
+
         if env_ids:
             print(f"找到 {len(env_ids)} 个环境变量需要删除: {env_ids}")
             delete_result = QLAPI.deleteEnvs({"ids": env_ids})
@@ -109,12 +109,12 @@ def delete_ql_env(var_name: str):
 # ---------------- 青龙面板变量更新函数 ----------------
 def save_cookie_to_ql(var_name: str, cookie: str):
     """保存Cookie到青龙面板环境变量"""
-    
+
     try:
         delete_result = delete_ql_env(var_name)
         if not delete_result:
             print("删除已有变量失败，但仍将尝试创建新变量")
-        
+
         create_data = {
             "envs": [
                 {
@@ -125,7 +125,7 @@ def save_cookie_to_ql(var_name: str, cookie: str):
                 }
             ]
         }
-        
+
         create_result = QLAPI.createEnv(create_data)
         if create_result.get("code") == 200:
             print(f"青龙面板环境变量 {var_name} 创建成功")
@@ -141,7 +141,7 @@ def save_cookie_to_ql(var_name: str, cookie: str):
 def save_cookie(var_name: str, cookie: str):
     """根据当前环境保存Cookie到相应位置"""
     env_type = detect_environment()
-    
+
     if env_type == "qinglong":
         print("检测到青龙环境，保存变量到青龙面板...")
         return save_cookie_to_ql(var_name, cookie)
@@ -220,11 +220,21 @@ def session_login(user, password, solver_type, api_base_url, client_key):
 def sign(ns_cookie, ns_random):
     if not ns_cookie:
         return "invalid", "无有效Cookie"
-        
+
     headers = {
-        'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0",
-        'origin': "https://www.nodeseek.com",
+        'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+        'sec-ch-ua': "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"",
+        'sec-ch-ua-mobile': "?0",
+        'sec-ch-ua-platform': "\"macOS\"",
+        'sec-ch-ua-platform-version': "15.5.0",
+        'sec-fetch-dest': "empty",
+        'sec-fetch-mode': "cors",
+        'sec-fetch-site': "same-origin",
         'referer': "https://www.nodeseek.com/board",
+        'accept-language': "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
+        'Content-Type': "application/json",
+        'accept': "application/json, text/plain, */*",
+        'origin': "https://www.nodeseek.com",
         'Cookie': ns_cookie
     }
     try:
@@ -247,37 +257,37 @@ def get_signin_stats(ns_cookie, days=30):
     """查询本月的签到收益统计"""
     if not ns_cookie:
         return None, "无有效Cookie"
-        
+
     headers = {
         'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0",
         'origin': "https://www.nodeseek.com",
         'referer': "https://www.nodeseek.com/board",
         'Cookie': ns_cookie
     }
-    
+
     try:
         # 使用UTC+8时区（上海时区）
         utc_offset = timedelta(hours=8)
         now_utc = datetime.utcnow()
         now_shanghai = now_utc + utc_offset
         current_month_start = datetime(now_shanghai.year, now_shanghai.month, 1)
-        
+
         # 获取多页数据以确保覆盖本月所有数据
         all_records = []
         page = 1
-        
+
         while page <= 10:  # 最多查询10页，防止无限循环
             url = f"https://www.nodeseek.com/api/account/credit/page-{page}"
             response = requests.get(url, headers=headers, impersonate="chrome110")
             data = response.json()
-            
+
             if not data.get("success") or not data.get("data"):
                 break
-                
+
             records = data.get("data", [])
             if not records:
                 break
-                
+
             # 检查最后一条记录的时间，如果超出本月范围就停止
             last_record_time = datetime.fromisoformat(records[-1][3].replace('Z', '+00:00'))
             last_record_time_shanghai = last_record_time.replace(tzinfo=None) + utc_offset
@@ -291,26 +301,26 @@ def get_signin_stats(ns_cookie, days=30):
                 break
             else:
                 all_records.extend(records)
-                
+
             page += 1
             time.sleep(0.5)
-        
+
         # 筛选本月签到收益记录
         signin_records = []
         for record in all_records:
             amount, balance, description, timestamp = record
             record_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
             record_time_shanghai = record_time.replace(tzinfo=None) + utc_offset
-            
+
             # 只统计本月的签到收益
-            if (record_time_shanghai >= current_month_start and 
+            if (record_time_shanghai >= current_month_start and
                 "签到收益" in description and "鸡腿" in description):
                 signin_records.append({
                     'amount': amount,
                     'date': record_time_shanghai.strftime('%Y-%m-%d'),
                     'description': description
                 })
-        
+
         if not signin_records:
             return {
                 'total_amount': 0,
@@ -319,12 +329,12 @@ def get_signin_stats(ns_cookie, days=30):
                 'records': [],
                 'period': f"{now_shanghai.strftime('%Y年%m月')}"
             }, "查询成功，但没有找到本月签到记录"
-        
+
         # 统计数据
         total_amount = sum(record['amount'] for record in signin_records)
         days_count = len(signin_records)
         average = round(total_amount / days_count, 2) if days_count > 0 else 0
-        
+
         stats = {
             'total_amount': total_amount,
             'average': average,
@@ -332,9 +342,9 @@ def get_signin_stats(ns_cookie, days=30):
             'records': signin_records,
             'period': f"{now_shanghai.strftime('%Y年%m月')}"
         }
-        
+
         return stats, "查询成功"
-        
+
     except Exception as e:
         return None, f"查询异常: {str(e)}"
 
@@ -343,23 +353,23 @@ def print_signin_stats(stats, account_name):
     """打印签到统计信息"""
     if not stats:
         return
-        
+
     print(f"\n==== {account_name} 签到收益统计 ({stats['period']}) ====")
     print(f"签到天数: {stats['days_count']} 天")
     print(f"总获得鸡腿: {stats['total_amount']} 个")
     print(f"平均每日鸡腿: {stats['average']} 个")
-    
+
 
 # ---------------- 主流程 ----------------
 if __name__ == "__main__":
     solver_type = os.getenv("SOLVER_TYPE", "turnstile")
     api_base_url = os.getenv("API_BASE_URL", "")
-    client_key = os.getenv("CLIENTT_KEY", "") 
+    client_key = os.getenv("CLIENTT_KEY", "")
     ns_random = os.getenv("NS_RANDOM", "true")
 
     env_type = detect_environment()
     print(f"当前运行环境: {env_type}")
-    
+
     accounts = []
 
     # 先收集账号密码配置
@@ -377,39 +387,39 @@ if __name__ == "__main__":
             index += 1
         else:
             break
-    
+
     # 读取现有Cookie
     all_cookies = os.getenv("NS_COOKIE", "")
     cookie_list = all_cookies.split("&")
     cookie_list = [c.strip() for c in cookie_list if c.strip()]
-    
+
     print(f"共发现 {len(accounts)} 个账户配置，{len(cookie_list)} 个现有Cookie")
-    
+
     if len(accounts) == 0 and len(cookie_list) > 0:
         for i in range(len(cookie_list)):
             accounts.append({"user": "", "password": ""})
-    
+
     max_count = max(len(accounts), len(cookie_list))
-    
+
     while len(accounts) < max_count:
         accounts.append({"user": "", "password": ""})
-    
+
     while len(cookie_list) < max_count:
         cookie_list.append("")
-    
+
     cookies_updated = False
-    
+
     for i in range(max_count):
         account_index = i + 1
         account = accounts[i]
         user = account["user"]
         password = account["password"]
         cookie = cookie_list[i] if i < len(cookie_list) else ""
-        
+
         display_user = user if user else f"账号{account_index}"
-        
+
         print(f"\n==== 账号 {display_user} 开始签到 ====")
-        
+
         if cookie:
             result, msg = sign(cookie, ns_random)
         else:
@@ -417,14 +427,14 @@ if __name__ == "__main__":
 
         if result in ["success", "already"]:
             print(f"账号 {display_user} 签到成功: {msg}")
-            
+
             print("正在查询签到收益统计...")
             stats, stats_msg = get_signin_stats(cookie, 30)
             if stats:
                 print_signin_stats(stats, display_user)
             else:
                 print(f"统计查询失败: {stats_msg}")
-            
+
             if hadsend:
                 try:
                     notification_msg = f"账号 {display_user} 签到成功：{msg}"
@@ -435,7 +445,7 @@ if __name__ == "__main__":
                     print(f"发送通知失败: {e}")
         else:
             print(f"签到失败或Cookie无效: {msg}")
-            
+
             if user and password:
                 print("尝试重新登录获取新Cookie...")
                 new_cookie = session_login(user, password, solver_type, api_base_url, client_key)
@@ -445,16 +455,16 @@ if __name__ == "__main__":
                     if result in ["success", "already"]:
                         print(f"账号 {display_user} 签到成功: {msg}")
                         cookies_updated = True
-                        
+
                         print("正在查询签到收益统计...")
                         stats, stats_msg = get_signin_stats(new_cookie, 30)
                         if stats:
                             print_signin_stats(stats, display_user)
                         else:
                             print(f"统计查询失败: {stats_msg}")
-                        
+
                         cookie_list[i] = new_cookie
-                        
+
                         if hadsend:
                             try:
                                 notification_msg = f"账号 {display_user} 签到成功：{msg}"
@@ -474,7 +484,7 @@ if __name__ == "__main__":
                             print(f"发送通知失败: {e}")
             else:
                 print(f"账号 {display_user} 无法重新登录: 未配置用户名或密码")
-    
+
     if cookies_updated and cookie_list:
         print("\n==== 处理完毕，保存更新后的Cookie ====")
         all_cookies_new = "&".join([c for c in cookie_list if c.strip()])
